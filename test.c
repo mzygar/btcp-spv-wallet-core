@@ -1565,7 +1565,7 @@ int BRTransactionTests()
     uint8_t script[BRAddressScriptPubKey(NULL, 0, address.s)];
     size_t scriptLen = BRAddressScriptPubKey(script, sizeof(script), address.s);
     BRTransaction *tx = BRTransactionNew();
-
+    
     BRTransactionAddInput(tx, inHash, 0, 1, script, scriptLen, NULL, 0, NULL, 0, TXIN_SEQUENCE);
     BRTransactionAddOutput(tx, 100000000, script, scriptLen);
     BRTransactionAddOutput(tx, 4900000000, script, scriptLen);
