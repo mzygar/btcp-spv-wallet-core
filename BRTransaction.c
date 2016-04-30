@@ -383,7 +383,7 @@ BRTransaction *BRTransactionParse(const uint8_t *buf, size_t bufLen)
     if (! buf) return NULL;
 
     int isSigned = 1, witnessFlag = 0;
-    size_t i, j, off = 0, sLen = 0, len = 0, count;
+    size_t i, j, off = 0, witnessOff = 0, sLen = 0, len = 0, count;
     BRTransaction *tx = BRTransactionNew();
     BRTxInput *input;
     BRTxOutput *output;
@@ -438,7 +438,7 @@ BRTransaction *BRTransactionParse(const uint8_t *buf, size_t bufLen)
         off += sLen;
     }
 
-    for (i = 0; witnessFlag && off <= bufLen && i < tx->inCount; i++) {
+    for (i = 0, witnessOff = off; witnessFlag && off <= bufLen && i < tx->inCount; i++) {
         input = &tx->inputs[i];
         count = BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
         off += len;
@@ -459,8 +459,19 @@ BRTransaction *BRTransactionParse(const uint8_t *buf, size_t bufLen)
         BRTransactionFree(tx);
         tx = NULL;
     }
+    else if (isSigned && witnessFlag) {
+        size_t sBufLen = witnessOff - 2 + sizeof(uint32_t);
+        uint8_t _sBuf[(sBufLen <= 0x1000) ? sBufLen : 0], *sBuf = (sBufLen <= 0x1000) ? _sBuf : malloc(sBufLen);
+
+        BRSHA256_2(&tx->wtxHash, buf, off);
+        UInt32SetLE(sBuf, tx->version);
+        memcpy(&sBuf[sizeof(uint32_t)], &buf[sizeof(uint32_t) + 2], witnessOff - (sizeof(uint32_t) + 2));
+        UInt32SetLE(&sBuf[witnessOff - 2], tx->lockTime);
+        BRSHA256_2(&tx->txHash, sBuf, sBufLen);
+        if (sBuf != _sBuf) free(sBuf);
+    }
     else if (isSigned) {
-        BRSHA256_2(&tx->txHash, buf, off);
+        BRSHA256_2(&tx->wtxHash, buf, off);
         tx->wtxHash = tx->txHash;
     }
 
