@@ -46,17 +46,19 @@
 #if BITCOIN_TESTNET
 #define MAGIC_NUMBER 0xf1c8d2fd
 #else
-#define MAGIC_NUMBER 0xdbb6c0fb
+#define MAGIC_NUMBER 0xcda2eaa8
 #endif
 #define HEADER_LENGTH      24
 #define MAX_MSG_LENGTH     0x02000000
 #define MAX_GETDATA_HASHES 50000
 #define ENABLED_SERVICES   0ULL  // we don't provide full blocks to remote nodes
-#define PROTOCOL_VERSION   70015
-#define MIN_PROTO_VERSION  70002 // peers earlier than this protocol version not supported (need v0.9 txFee relay rules)
+#define PROTOCOL_VERSION   180003
+#define MIN_PROTO_VERSION  180000 // peers earlier than this protocol version not supported (need v0.9 txFee relay rules)
 #define LOCAL_HOST         ((UInt128) { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x01 })
 #define CONNECT_TIMEOUT    3.0
 #define MESSAGE_TIMEOUT    10.0
+
+#define TIMESTAMP_OFFSET 100
 
 // the standard blockchain download protocol works as follows (for SPV mode):
 // - local peer sends getblocks
@@ -448,9 +450,9 @@ static int _BRPeerAcceptHeadersMessage(BRPeer *peer, const uint8_t *msg, size_t 
     size_t off = 0, count = (size_t)BRVarInt(msg, msgLen, &off);
     int r = 1;
 
-    if (off == 0 || off + 81*count > msgLen) {
+    if (off == 0 || off + (HEADER_SIZE+1-1)*count > msgLen) {
         peer_log(peer, "malformed headers message, length is %zu, should be %zu for %zu header(s)", msgLen,
-                 BRVarIntSize(count) + 81*count, count);
+                 BRVarIntSize(count) + (HEADER_SIZE+1-1)*count, count);
         r = 0;
     }
     else {
@@ -458,34 +460,42 @@ static int _BRPeerAcceptHeadersMessage(BRPeer *peer, const uint8_t *msg, size_t 
     
         // To improve chain download performance, if this message contains 2000 headers then request the next 2000
         // headers immediately, and switch to requesting blocks when we receive a header newer than earliestKeyTime
-        uint32_t timestamp = (count > 0) ? UInt32GetLE(&msg[off + 81*(count - 1) + 68]) : 0;
+        uint32_t timestamp = (count > 0) ? UInt32GetLE(&msg[off + (HEADER_SIZE+1-1)*(count - 1) + 100]) : 0;
     
-        if (count >= 2000 || (timestamp > 0 && timestamp + 7*24*60*60 + BLOCK_MAX_TIME_DRIFT >= ctx->earliestKeyTime)) {
+        if (count >= 160 || (timestamp > 0 && timestamp + 7*24*60*60 + BLOCK_MAX_TIME_DRIFT >= ctx->earliestKeyTime)) {
             size_t last = 0;
             time_t now = time(NULL);
             UInt256 locators[2];
             
-            BRSHA256_2(&locators[0], &msg[off + 81*(count - 1)], 80);
-            BRSHA256_2(&locators[1], &msg[off], 80);
+//            BRSHA256_2(&locators[0], &msg[off + (HEADER_SIZE+1)*(count - 1)], HEADER_SIZE);
+//            BRSHA256_2(&locators[1], &msg[off], HEADER_SIZE);
+//
+//            if (timestamp > 0 && timestamp + 7*24*60*60 + BLOCK_MAX_TIME_DRIFT >= ctx->earliestKeyTime) {
+//                // request blocks for the remainder of the chain
+//                timestamp = (++last < count) ? UInt32GetLE(&msg[off + (140+1)*last + 100]) : 0;
+//
+//                while (timestamp > 0 && timestamp + 7*24*60*60 + BLOCK_MAX_TIME_DRIFT < ctx->earliestKeyTime) {
+//                    timestamp = (++last < count) ? UInt32GetLE(&msg[off + (140+1)*last + 100]) : 0;
+//                }
+//
+////                BRSHA256_2(&locators[0], &msg[off + (140+1)*(last - 1)], 140);
+////                BRPeerSendGetblocks(peer, locators, 2, UINT256_ZERO);
+//            }
+//            else BRPeerSendGetheaders(peer, locators, 2, UINT256_ZERO);
 
-            if (timestamp > 0 && timestamp + 7*24*60*60 + BLOCK_MAX_TIME_DRIFT >= ctx->earliestKeyTime) {
-                // request blocks for the remainder of the chain
-                timestamp = (++last < count) ? UInt32GetLE(&msg[off + 81*last + 68]) : 0;
-
-                while (timestamp > 0 && timestamp + 7*24*60*60 + BLOCK_MAX_TIME_DRIFT < ctx->earliestKeyTime) {
-                    timestamp = (++last < count) ? UInt32GetLE(&msg[off + 81*last + 68]) : 0;
-                }
-                
-                BRSHA256_2(&locators[0], &msg[off + 81*(last - 1)], 80);
-                BRPeerSendGetblocks(peer, locators, 2, UINT256_ZERO);
-            }
-            else BRPeerSendGetheaders(peer, locators, 2, UINT256_ZERO);
-
+//            printf("***\n");
+//            for (int i = 0; i < 1+(HEADER_SIZE+1)*2; i++) {
+//                printf("%02x",msg[i]);
+//                if (i == 1+(HEADER_SIZE+1)) {
+//                    printf("||||");
+//                }
+//            }
+//            printf("***\n");
             for (size_t i = 0; r && i < count; i++) {
-                BRMerkleBlock *block = BRMerkleBlockParse(&msg[off + 81*i], 81);
+                BRMerkleBlock *block = BRMerkleBlockParse(&msg[off + (HEADER_SIZE+1-1)*i], HEADER_SIZE+1-1);
                 
                 if (! BRMerkleBlockIsValid(block, (uint32_t)now)) {
-                    peer_log(peer, "invalid block header: %s", u256_hex_encode(block->blockHash));
+                    peer_log(peer, "invalid block header: %s", u256_hex_encode(UInt256Reverse(block->blockHash)));
                     BRMerkleBlockFree(block);
                     r = 0;
                 }
@@ -1398,8 +1408,8 @@ void BRPeerSendGetheaders(BRPeer *peer, const UInt256 locators[], size_t locator
 
     if (locatorsCount > 0) {
         peer_log(peer, "calling getheaders with %zu locators: [%s,%s %s]", locatorsCount,
-                 u256_hex_encode(locators[0]), (locatorsCount > 2 ? " ...," : ""),
-                 (locatorsCount > 1 ? u256_hex_encode(locators[locatorsCount - 1]) : ""));
+                 u256_hex_encode(UInt256Reverse(locators[0])), (locatorsCount > 2 ? " ...," : ""),
+                 (locatorsCount > 1 ? u256_hex_encode(UInt256Reverse(locators[locatorsCount - 1])) : ""));
         BRPeerSendMessage(peer, msg, off, MSG_GETHEADERS);
     }
 }
