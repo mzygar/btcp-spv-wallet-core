@@ -285,7 +285,7 @@ size_t BRAddressFromScriptSig(char *addr, size_t addrLen, const uint8_t *script,
     assert(script != NULL || scriptLen == 0);
     if (! script || scriptLen == 0 || scriptLen > MAX_SCRIPT_LENGTH) return 0;
     
-    uint8_t data[21];
+    uint8_t data[22];
     const uint8_t *elems[BRScriptElements(NULL, 0, script, scriptLen)], *d = NULL;
     size_t count = BRScriptElements(elems, sizeof(elems)/sizeof(*elems), script, scriptLen), l = 0;
 
@@ -324,7 +324,7 @@ size_t BRAddressScriptPubKey(uint8_t *script, size_t scriptLen, const char *addr
 {
     //FIXME:MZ ADD SECOND BYTE
     static uint8_t pubkeyAddress = BITCOIN_PUBKEY_ADDRESS_0, scriptAddress = BITCOIN_SCRIPT_ADDRESS_0;
-    uint8_t data[21];
+    uint8_t data[22];
     size_t r = 0;
     
     assert(addr != NULL);

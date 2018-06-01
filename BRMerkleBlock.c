@@ -157,7 +157,7 @@ BRMerkleBlock *BRMerkleBlockParse(const uint8_t *buf, size_t bufLen)
 //            if (block->flags) memcpy(block->flags, &buf[off], len);
 //        }
 
-        BRSHA256_2(&block->blockHash, buf, HEADER_SIZE);
+        BRSHA256_2(&block->blockHash, buf, 140);
 //        BRScrypt(&block->powHash, sizeof(block->powHash), buf, 80, buf, 80, 1024, 1, 1);
     }
     printf("block hash %s\n", u256_hex_encode(UInt256Reverse(block->blockHash)));
