@@ -29,23 +29,36 @@
 #include <stddef.h>
 #include <inttypes.h>
 
+#if defined(TARGET_OS_MAC)
+#include <Foundation/Foundation.h>
+#define loaf_log(...) NSLog(__VA_ARGS__)
+#elif defined(__ANDROID__)
+#include <android/log.h>
+#define loaf_log(...) __android_log_print(ANDROID_LOG_ERROR, "loaf", __VA_ARGS__)
+#else
+#include <stdio.h>
+#define loaf_log(...) printf(__VA_ARGS__)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define BLOCK_DIFFICULTY_INTERVAL 2016 // number of blocks between difficulty target adjustments
+#define BLOCK_DIFFICULTY_INTERVAL 1916 // number of blocks between difficulty target adjustments
 #define BLOCK_UNKNOWN_HEIGHT      INT32_MAX
-#define BLOCK_MAX_TIME_DRIFT      (2*60*60) // the furthest in the future a block is allowed to be timestamped
+#define BLOCK_MAX_TIME_DRIFT      (24*60*60) // the furthest in the future a block is allowed to be timestamped
+#define HEADER_SIZE 140+1344+4
 
 typedef struct {
     UInt256 blockHash;
-    UInt256 powHash;
+    
     uint32_t version;
     UInt256 prevBlock;
     UInt256 merkleRoot;
+    UInt256 hashReserved;
     uint32_t timestamp; // time interval since unix epoch
     uint32_t target;
-    uint32_t nonce;
+    UInt256 nonce;
     uint32_t totalTx;
     UInt256 *hashes;
     size_t hashesCount;

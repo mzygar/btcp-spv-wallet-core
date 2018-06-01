@@ -286,16 +286,17 @@ UInt160 BRKeyHash160(BRKey *key)
 size_t BRKeyAddress(BRKey *key, char *addr, size_t addrLen)
 {
     UInt160 hash;
-    uint8_t data[21];
+    uint8_t data[22];
 
     assert(key != NULL);
     
     hash = BRKeyHash160(key);
-    data[0] = BITCOIN_PUBKEY_ADDRESS;
+    data[0] = BITCOIN_PUBKEY_ADDRESS_0;
+    data[1] = BITCOIN_PUBKEY_ADDRESS_1;
 #if BITCOIN_TESTNET
     data[0] = BITCOIN_PUBKEY_ADDRESS_TEST;
 #endif
-    UInt160Set(&data[1], hash);
+    UInt160Set(&data[2], hash);
 
     if (! UInt160IsZero(hash)) {
         addrLen = BRBase58CheckEncode(addr, addrLen, data, sizeof(data));

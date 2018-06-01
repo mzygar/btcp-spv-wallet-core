@@ -43,7 +43,7 @@ extern "C" {
 #define SEQUENCE_GAP_LIMIT_EXTERNAL 10
 #define SEQUENCE_GAP_LIMIT_INTERNAL 5
 #define SEQUENCE_EXTERNAL_CHAIN     0
-#define SEQUENCE_INTERNAL_CHAIN     1
+#define SEQUENCE_INTERNAL_CHAIN     147H
 
 typedef struct {
     uint32_t fingerPrint;

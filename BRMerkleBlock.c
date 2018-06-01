@@ -87,52 +87,89 @@ BRMerkleBlock *BRMerkleBlockNew(void)
 // returns a merkle block struct that must be freed by calling BRMerkleBlockFree()
 BRMerkleBlock *BRMerkleBlockParse(const uint8_t *buf, size_t bufLen)
 {
-    BRMerkleBlock *block = (buf && 80 <= bufLen) ? BRMerkleBlockNew() : NULL;
+    BRMerkleBlock *block = (buf && HEADER_SIZE <= bufLen) ? BRMerkleBlockNew() : NULL;
     size_t off = 0, len = 0;
-    
+    printf("----------------------\n");
     assert(buf != NULL || bufLen == 0);
-    
+//
+//    for (int i =bufLen -1; i>0; i--) {
+//        printf("%02x",buf[i]);
+//        if (i == bufLen-1 -32) {
+//            printf("|");
+//        }
+//        if (i == bufLen-1 -32-4) {
+//            printf("|");
+//        }
+//        if (i == bufLen -1-32-4-4) {
+//            printf("|");
+//        }
+//        if (i == bufLen-1 -32-4-4-32) {
+//            printf("|");
+//        }
+//        if (i == bufLen-1 -32-4-4-32-32) {
+//            printf("|");
+//        }
+//    }
+//    printf("\n");
+
     if (block) {
         block->version = UInt32GetLE(&buf[off]);
+        printf("block verion: %d\n", block->version);
         off += sizeof(uint32_t);
+        
         block->prevBlock = UInt256Get(&buf[off]);
+        printf("prev block %s\n", u256_hex_encode(UInt256Reverse(block->prevBlock)));
         off += sizeof(UInt256);
+
         block->merkleRoot = UInt256Get(&buf[off]);
+        printf("merkle root %s\n", u256_hex_encode(UInt256Reverse(block->merkleRoot)));
         off += sizeof(UInt256);
+
+        block->hashReserved = UInt256Get(&buf[off]);
+        printf("hashReserved %s\n", u256_hex_encode(UInt256Reverse(block->hashReserved)));
+        off += sizeof(UInt256);
+
         block->timestamp = UInt32GetLE(&buf[off]);
+        printf("timestamp: %d\n", block->timestamp);
         off += sizeof(uint32_t);
+
         block->target = UInt32GetLE(&buf[off]);
+        printf("target(bits): %x\n", block->target);
         off += sizeof(uint32_t);
-        block->nonce = UInt32GetLE(&buf[off]);
-        off += sizeof(uint32_t);
+
+        block->nonce = UInt256Get(&buf[off]);
+        printf("nonce: %s\n", u256_hex_encode(UInt256Reverse(block->nonce)));
+        off += sizeof(UInt256);
         
-        if (off + sizeof(uint32_t) <= bufLen) {
-            block->totalTx = UInt32GetLE(&buf[off]);
-            off += sizeof(uint32_t);
-            block->hashesCount = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
-            off += len;
-            len = block->hashesCount*sizeof(UInt256);
-            block->hashes = (off + len <= bufLen) ? malloc(len) : NULL;
-            if (block->hashes) memcpy(block->hashes, &buf[off], len);
-            off += len;
-            block->flagsLen = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
-            off += len;
-            len = block->flagsLen;
-            block->flags = (off + len <= bufLen) ? malloc(len) : NULL;
-            if (block->flags) memcpy(block->flags, &buf[off], len);
-        }
-        
-        BRSHA256_2(&block->blockHash, buf, 80);
-        BRScrypt(&block->powHash, sizeof(block->powHash), buf, 80, buf, 80, 1024, 1, 1);
+//        if (off + sizeof(uint32_t) <= bufLen) {
+//            block->totalTx = UInt32GetLE(&buf[off]);
+//            off += sizeof(uint32_t);
+//            block->hashesCount = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
+//            off += len;
+//            len = block->hashesCount*sizeof(UInt256);
+//            block->hashes = (off + len <= bufLen) ? malloc(len) : NULL;
+//            if (block->hashes) memcpy(block->hashes, &buf[off], len);
+//            off += len;
+//            block->flagsLen = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
+//            off += len;
+//            len = block->flagsLen;
+//            block->flags = (off + len <= bufLen) ? malloc(len) : NULL;
+//            if (block->flags) memcpy(block->flags, &buf[off], len);
+//        }
+
+        BRSHA256_2(&block->blockHash, buf, 140);
+//        BRScrypt(&block->powHash, sizeof(block->powHash), buf, 80, buf, 80, 1024, 1, 1);
     }
-    
+    printf("block hash %s\n", u256_hex_encode(UInt256Reverse(block->blockHash)));
+    printf("----------------------\n");
+//    printf("block pow hash %s\n", u256_hex_encode(UInt256Reverse(block->powHash)));
     return block;
 }
 
 // returns number of bytes written to buf, or total bufLen needed if buf is NULL (block->height is not serialized)
 size_t BRMerkleBlockSerialize(const BRMerkleBlock *block, uint8_t *buf, size_t bufLen)
 {
-    size_t off = 0, len = 80;
+    size_t off = 0, len = HEADER_SIZE;
     
     assert(block != NULL);
     
@@ -148,12 +185,14 @@ size_t BRMerkleBlockSerialize(const BRMerkleBlock *block, uint8_t *buf, size_t b
         off += sizeof(UInt256);
         UInt256Set(&buf[off], block->merkleRoot);
         off += sizeof(UInt256);
+        UInt256Set(&buf[off], block->hashReserved);
+        off += sizeof(UInt256);
         UInt32SetLE(&buf[off], block->timestamp);
         off += sizeof(uint32_t);
         UInt32SetLE(&buf[off], block->target);
         off += sizeof(uint32_t);
-        UInt32SetLE(&buf[off], block->nonce);
-        off += sizeof(uint32_t);
+        UInt256Set(&buf[off], block->nonce);
+        off += sizeof(UInt256);
     
         if (block->totalTx > 0) {
             UInt32SetLE(&buf[off], block->totalTx);
@@ -278,10 +317,10 @@ int BRMerkleBlockIsValid(const BRMerkleBlock *block, uint32_t currentTime)
     if (size > 3) UInt32SetLE(&t.u8[size - 3], target);
     else UInt32SetLE(t.u8, target >> (3 - size)*8);
     
-    for (int i = sizeof(t) - 1; r && i >= 0; i--) { // check proof-of-work
-        if (block->powHash.u8[i] < t.u8[i]) break;
-        if (block->powHash.u8[i] > t.u8[i]) r = 0;
-    }
+//    for (int i = sizeof(t) - 1; r && i >= 0; i--) { // check proof-of-work
+//        if (block->powHash.u8[i] < t.u8[i]) break;
+//        if (block->powHash.u8[i] > t.u8[i]) r = 0;
+//    }
     
     return r;
 }
