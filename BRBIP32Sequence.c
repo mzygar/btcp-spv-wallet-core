@@ -123,13 +123,16 @@ BRMasterPubKey BRBIP32MasterPubKey(const void *seed, size_t seedLen)
         BRKeySetSecret(&key, &secret, 1);
         mpk.fingerPrint = BRKeyHash160(&key).u32[0];
         
-        _CKDpriv(&secret, &chain, 0 | BIP32_HARD); // path m/0H
-    
+        _CKDpriv(&secret, &chain, 44 | BIP32_HARD); // path m/44H
+        _CKDpriv(&secret, &chain, 183 | BIP32_HARD); // path m/44H/183
+		_CKDpriv(&secret, &chain, 0 | BIP32_HARD); // path m/0H/chain
         mpk.chainCode = chain;
         BRKeySetSecret(&key, &secret, 1);
+        printf("%s",u256_hex_encode(UInt256Reverse(secret)));
         var_clean(&secret, &chain);
         BRKeyPubKey(&key, &mpk.pubKey, sizeof(mpk.pubKey)); // path N(m/0H)
         BRKeyClean(&key);
+    
     }
     
     return mpk;
@@ -145,7 +148,9 @@ size_t BRBIP32PubKey(uint8_t *pubKey, size_t pubKeyLen, BRMasterPubKey mpk, uint
     
     if (pubKey && sizeof(BRECPoint) <= pubKeyLen) {
         *(BRECPoint *)pubKey = *(BRECPoint *)mpk.pubKey;
-
+        _CKDpub((BRECPoint *)pubKey, &chainCode, 44 | BIP32_HARD); // path N(m/0H/chain)
+        _CKDpub((BRECPoint *)pubKey, &chainCode, 183 | BIP32_HARD); // path N(m/0H/chain)
+        _CKDpub((BRECPoint *)pubKey, &chainCode, 0 | BIP32_HARD); // path N(m/0H/chain)
         _CKDpub((BRECPoint *)pubKey, &chainCode, chain); // path N(m/0H/chain)
         _CKDpub((BRECPoint *)pubKey, &chainCode, index); // index'th key in chain
         var_clean(&chainCode);
@@ -157,7 +162,7 @@ size_t BRBIP32PubKey(uint8_t *pubKey, size_t pubKeyLen, BRMasterPubKey mpk, uint
 // sets the private key for path m/0H/chain/index to key
 void BRBIP32PrivKey(BRKey *key, const void *seed, size_t seedLen, uint32_t chain, uint32_t index)
 {
-    BRBIP32PrivKeyPath(key, seed, seedLen, 3, 44 | BIP32_HARD, chain, index);
+    BRBIP32PrivKeyPath(key, seed, seedLen, 3, 44 | BIP32_HARD, 183 | BIP32_HARD, chain, index);
 }
 
 // sets the private key for path m/0H/chain/index to each element in keys
@@ -178,8 +183,10 @@ void BRBIP32PrivKeyList(BRKey keys[], size_t keysCount, const void *seed, size_t
         var_clean(&I);
 
         _CKDpriv(&secret, &chainCode, 44 | BIP32_HARD); // path m/0H
-        _CKDpriv(&secret, &chainCode, chain); // path m/0H/chain
-    
+        _CKDpriv(&secret, &chainCode, 183 | BIP32_HARD); // path m/0H/chain
+		_CKDpriv(&secret, &chainCode, 0 | BIP32_HARD); // path m/0H/chain
+
+        _CKDpriv(&secret, &chainCode, chain); // path m/0H/chain    
         for (size_t i = 0; i < keysCount; i++) {
             s = secret;
             c = chainCode;
@@ -280,7 +287,7 @@ void BRBIP32BitIDKey(BRKey *key, const void *seed, size_t seedLen, uint32_t inde
         UInt32SetLE(data, index);
         memcpy(&data[sizeof(index)], uri, uriLen);
         BRSHA256(&hash, data, sizeof(data));
-        BRBIP32PrivKeyPath(key, seed, seedLen, 5, 13 | BIP32_HARD, UInt32GetLE(&hash.u32[0]) | BIP32_HARD,
+        BRBIP32PrivKeyPath(key, seed, seedLen, 5, 44 | BIP32_HARD, UInt32GetLE(&hash.u32[0]) | BIP32_HARD,
                            UInt32GetLE(&hash.u32[1]) | BIP32_HARD, UInt32GetLE(&hash.u32[2]) | BIP32_HARD,
                            UInt32GetLE(&hash.u32[3]) | BIP32_HARD); // path m/13H/aH/bH/cH/dH
         //btcp path m/44/183/0
