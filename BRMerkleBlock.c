@@ -30,6 +30,7 @@
 #include <limits.h>
 #include <string.h>
 #include <assert.h>
+#include "BREquihashSolver.h"
 
 #define MAX_PROOF_OF_WORK 0x1e0fffff    // highest value for difficulty target (higher values are less difficult)
 #define TARGET_TIMESPAN   302400        // = 3.5*24*60*60; the targeted timespan between difficulty target adjustments
@@ -89,7 +90,7 @@ BRMerkleBlock *BRMerkleBlockParse(const uint8_t *buf, size_t bufLen)
 {
     BRMerkleBlock *block = (buf && HEADER_SIZE <= bufLen) ? BRMerkleBlockNew() : NULL;
     size_t off = 0, len = 0;
-    printf("----------------------\n");
+//    printf("----------------------\n");
     assert(buf != NULL || bufLen == 0);
 //
 //    for (int i =bufLen -1; i>0; i--) {
@@ -110,11 +111,12 @@ BRMerkleBlock *BRMerkleBlockParse(const uint8_t *buf, size_t bufLen)
 //            printf("|");
 //        }
 //    }
-//    printf("\n");
+    dump_hex(buf+HEADER_SIZE, bufLen-HEADER_SIZE);
+    printf("\n");
 
     if (block) {
         block->version = UInt32GetLE(&buf[off]);
-        printf("block verion: %d\n", block->version);
+//        printf("block verion: %d\n", block->version);
         off += sizeof(uint32_t);
         
         block->prevBlock = UInt256Get(&buf[off]);
@@ -122,11 +124,11 @@ BRMerkleBlock *BRMerkleBlockParse(const uint8_t *buf, size_t bufLen)
         off += sizeof(UInt256);
 
         block->merkleRoot = UInt256Get(&buf[off]);
-        printf("merkle root %s\n", u256_hex_encode(UInt256Reverse(block->merkleRoot)));
+//        printf("merkle root %s\n", u256_hex_encode(UInt256Reverse(block->merkleRoot)));
         off += sizeof(UInt256);
 
         block->hashReserved = UInt256Get(&buf[off]);
-        printf("hashReserved %s\n", u256_hex_encode(UInt256Reverse(block->hashReserved)));
+//        printf("hashReserved %s\n", u256_hex_encode(UInt256Reverse(block->hashReserved)));
         off += sizeof(UInt256);
 
         block->timestamp = UInt32GetLE(&buf[off]);
@@ -138,28 +140,32 @@ BRMerkleBlock *BRMerkleBlockParse(const uint8_t *buf, size_t bufLen)
         off += sizeof(uint32_t);
 
         block->nonce = UInt256Get(&buf[off]);
-        printf("nonce: %s\n", u256_hex_encode(UInt256Reverse(block->nonce)));
+//        printf("nonce: %s\n", u256_hex_encode(UInt256Reverse(block->nonce)));
         off += sizeof(UInt256);
-        
-//        if (off + sizeof(uint32_t) <= bufLen) {
-//            block->totalTx = UInt32GetLE(&buf[off]);
-//            off += sizeof(uint32_t);
-//            block->hashesCount = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
-//            off += len;
-//            len = block->hashesCount*sizeof(UInt256);
-//            block->hashes = (off + len <= bufLen) ? malloc(len) : NULL;
-//            if (block->hashes) memcpy(block->hashes, &buf[off], len);
-//            off += len;
-//            block->flagsLen = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
-//            off += len;
-//            len = block->flagsLen;
-//            block->flags = (off + len <= bufLen) ? malloc(len) : NULL;
-//            if (block->flags) memcpy(block->flags, &buf[off], len);
-//        }
-
-        BRSHA256_2(&block->blockHash, buf, 140);
+        off += 1344+4-1;
+        if (off + sizeof(uint32_t) <= bufLen) {
+            block->totalTx = UInt32GetLE(&buf[off]);
+            printf("transactions in block: %d\n", block->totalTx);
+            off += sizeof(uint32_t);
+            block->hashesCount = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
+            off += len;
+            len = block->hashesCount*sizeof(UInt256);
+            block->hashes = (off + len <= bufLen) ? malloc(len) : NULL;
+            if (block->hashes) memcpy(block->hashes, &buf[off], len);
+            off += len;
+            block->flagsLen = (size_t)BRVarInt(&buf[off], (off <= bufLen ? bufLen - off : 0), &len);
+            off += len;
+            len = block->flagsLen;
+            block->flags = (off + len <= bufLen) ? malloc(len) : NULL;
+            if (block->flags) memcpy(block->flags, &buf[off], len);
+        }
+//        char* header = malloc(140);
+//        memcpy(&header, buf, 140);
+//        BREquihash(buf,block->nonce);
+        BRSHA256_2(&block->blockHash, buf, HEADER_SIZE-1);
 //        BRScrypt(&block->powHash, sizeof(block->powHash), buf, 80, buf, 80, 1024, 1, 1);
     }
+
     printf("block hash %s\n", u256_hex_encode(UInt256Reverse(block->blockHash)));
     printf("----------------------\n");
 //    printf("block pow hash %s\n", u256_hex_encode(UInt256Reverse(block->powHash)));
@@ -355,44 +361,43 @@ int BRMerkleBlockVerifyDifficulty(const BRMerkleBlock *block, const BRMerkleBloc
 {
     int r = 1;
     
-    assert(block != NULL);
-    assert(previous != NULL);
-    
-    if (! previous || !UInt256Eq(block->prevBlock, previous->blockHash) || block->height != previous->height + 1) r = 0;
-    if (r && (block->height % BLOCK_DIFFICULTY_INTERVAL) == 0 && transitionTime == 0) r = 0;
-    
-#if BITCOIN_TESTNET
-    // TODO: implement testnet difficulty rule check
-    return r; // don't worry about difficulty on testnet for now
-#endif
-    
-    // TODO: fix difficulty target check for Litecoin
-    // if (r && (block->height % BLOCK_DIFFICULTY_INTERVAL) == 0) {
-    //     // target is in "compact" format, where the most significant byte is the size of resulting value in bytes, next
-    //     // bit is the sign, and the remaining 23bits is the value after having been right shifted by (size - 3)*8 bits
-    //     static const uint32_t maxsize = MAX_PROOF_OF_WORK >> 24, maxtarget = MAX_PROOF_OF_WORK & 0x00ffffff;
-    //     int timespan = (int)((int64_t)previous->timestamp - (int64_t)transitionTime), size = previous->target >> 24;
-    //     uint64_t target = previous->target & 0x00ffffff;
-    
-    //     // limit difficulty transition to -75% or +400%
-    //     if (timespan < TARGET_TIMESPAN/4) timespan = TARGET_TIMESPAN/4;
-    //     if (timespan > TARGET_TIMESPAN*4) timespan = TARGET_TIMESPAN*4;
-    
-    //     // TARGET_TIMESPAN happens to be a multiple of 256, and since timespan is at least TARGET_TIMESPAN/4, we don't
-    //     // lose precision when target is multiplied by timespan and then divided by TARGET_TIMESPAN/256
-    //     target *= timespan;
-    //     target /= TARGET_TIMESPAN >> 8;
-    //     size--; // decrement size since we only divided by TARGET_TIMESPAN/256
-    
-    //     while (size < 1 || target > 0x007fffff) target >>= 8, size++; // normalize target for "compact" format
-    
-    //     // limit to MAX_PROOF_OF_WORK
-    //     if (size > maxsize || (size == maxsize && target > maxtarget)) target = maxtarget, size = maxsize;
-    
-    //     if (block->target != ((uint32_t)target | size << 24)) r = 0;
-    // }
-    // else if (r && block->target != previous->target) r = 0;
-    
+//    assert(block != NULL);
+//    assert(previous != NULL);
+//    
+//    if (! previous || !UInt256Eq(block->prevBlock, previous->blockHash) || block->height != previous->height + 1) r = 0;
+//    if (r && (block->height % BLOCK_DIFFICULTY_INTERVAL) == 0 && transitionTime == 0) r = 0;
+//    
+//#if BITCOIN_TESTNET
+//    // TODO: implement testnet difficulty rule check
+//    return r; // don't worry about difficulty on testnet for now
+//#endif
+////
+//    if (r && (block->height % BLOCK_DIFFICULTY_INTERVAL) == 0) {
+//        // target is in "compact" format, where the most significant byte is the size of resulting value in bytes, next
+//        // bit is the sign, and the remaining 23bits is the value after having been right shifted by (size - 3)*8 bits
+//        static const uint32_t maxsize = MAX_PROOF_OF_WORK >> 24, maxtarget = MAX_PROOF_OF_WORK & 0x00ffffff;
+//        int timespan = (int)((int64_t)previous->timestamp - (int64_t)transitionTime), size = previous->target >> 24;
+//        uint64_t target = previous->target & 0x00ffffff;
+//
+//        // limit difficulty transition to -75% or +400%
+//        if (timespan < TARGET_TIMESPAN*0.32) timespan = TARGET_TIMESPAN*0.32;
+//        if (timespan > TARGET_TIMESPAN*1.16) timespan = TARGET_TIMESPAN*1.16;
+//
+//        // TARGET_TIMESPAN happens to be a multiple of 256, and since timespan is at least TARGET_TIMESPAN/4, we don't
+//        // lose precision when target is multiplied by timespan and then divided by TARGET_TIMESPAN/256
+//        target *= timespan;
+//        target /= TARGET_TIMESPAN >> 8;
+//        size--; // decrement size since we only divided by TARGET_TIMESPAN/256
+//
+//        while (size < 1 || target > 0x007fffff) target >>= 8, size++; // normalize target for "compact" format
+//
+//        // limit to MAX_PROOF_OF_WORK
+//        if (size > maxsize || (size == maxsize && target > maxtarget)) target = maxtarget, size = maxsize;
+//
+//        if (block->target != ((uint32_t)target | size << 24)) r = 0;
+//    }
+//    else if (r && block->target != previous->target) r = 0;
+
     return r;
 }
 

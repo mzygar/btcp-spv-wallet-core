@@ -370,7 +370,7 @@ int BRAddressIsValid(const char *addr)
     
     assert(addr != NULL);
     
-    if (BRBase58CheckDecode(data, sizeof(data), addr) == 21) {
+    if (BRBase58CheckDecode(data, sizeof(data), addr) == 22) {
         r = (data[0] == BITCOIN_PUBKEY_ADDRESS_0 && data[1] == BITCOIN_PUBKEY_ADDRESS_1) || (data[0] == BITCOIN_SCRIPT_ADDRESS_0 && data[1] == BITCOIN_SCRIPT_ADDRESS_1);
     
 #if BITCOIN_TESTNET
