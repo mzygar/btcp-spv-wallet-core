@@ -254,8 +254,8 @@ size_t BRAddressFromScriptPubKey(char *addr, size_t addrLen, const uint8_t *scri
         *elems[3] == OP_EQUALVERIFY && *elems[4] == OP_CHECKSIG) {
         // pay-to-pubkey-hash scriptPubKey
         d = BRScriptData(elems[2], &l);
-        if (l != 19) d = NULL;
-        if (d) memcpy(&data[2], d, 19);
+        if (l != 20) d = NULL;
+        if (d) memcpy(&data[2], d, 20);
     }
     else if (count == 3 && *elems[0] == OP_HASH160 && *elems[1] == 20 && *elems[2] == OP_EQUAL) {
         // pay-to-script-hash scriptPubKey
@@ -266,13 +266,13 @@ size_t BRAddressFromScriptPubKey(char *addr, size_t addrLen, const uint8_t *scri
 #endif
         d = BRScriptData(elems[1], &l);
         if (l != 20) d = NULL;
-        if (d) memcpy(&data[1], d, 20);
+        if (d) memcpy(&data[2], d, 20);
     }
     else if (count == 2 && (*elems[0] == 65 || *elems[0] == 33) && *elems[1] == OP_CHECKSIG) {
         // pay-to-pubkey scriptPubKey
         d = BRScriptData(elems[0], &l);
         if (l != 65 && l != 33) d = NULL;
-        if (d) BRHash160(&data[1], d, l);
+        if (d) BRHash160(&data[2], d, l);
     }
     
     return (d) ? BRBase58CheckEncode(addr, addrLen, data, sizeof(data)) : 0;
@@ -322,8 +322,7 @@ size_t BRAddressFromScriptSig(char *addr, size_t addrLen, const uint8_t *script,
 // returns the number of bytes written, or scriptLen needed if script is NULL
 size_t BRAddressScriptPubKey(uint8_t *script, size_t scriptLen, const char *addr)
 {
-    //FIXME:MZ ADD SECOND BYTE
-    static uint8_t pubkeyAddress = BITCOIN_PUBKEY_ADDRESS_0, scriptAddress = BITCOIN_SCRIPT_ADDRESS_0;
+    static uint8_t pubkeyAddress = BITCOIN_PUBKEY_ADDRESS_1, scriptAddress = BITCOIN_SCRIPT_ADDRESS_1;
     uint8_t data[22];
     size_t r = 0;
     
@@ -333,25 +332,26 @@ size_t BRAddressScriptPubKey(uint8_t *script, size_t scriptLen, const char *addr
     pubkeyAddress = BITCOIN_PUBKEY_ADDRESS_TEST;
     scriptAddress = BITCOIN_SCRIPT_ADDRESS_TEST;
 #endif
-    
-    if (BRBase58CheckDecode(data, sizeof(data), addr) == 21) {
-        if (data[0] == pubkeyAddress) {
+
+    if (BRBase58CheckDecode(data, sizeof(data), addr) == 22) {
+        assert(data[0] == BITCOIN_PUBKEY_ADDRESS_0);
+        if (data[1] == pubkeyAddress) {
             if (script && 25 <= scriptLen) {
                 script[0] = OP_DUP;
                 script[1] = OP_HASH160;
                 script[2] = 20;
-                memcpy(&script[3], &data[1], 20);
+                memcpy(&script[3], &data[2], 20);
                 script[23] = OP_EQUALVERIFY;
                 script[24] = OP_CHECKSIG;
             }
             
             r = (! script || 25 <= scriptLen) ? 25 : 0;
         }
-        else if (data[0] == scriptAddress) {
+        else if (data[1] == scriptAddress) {
             if (script && 23 <= scriptLen) {
                 script[0] = OP_HASH160;
                 script[1] = 20;
-                memcpy(&script[2], &data[1], 20);
+                memcpy(&script[2], &data[2], 20);
                 script[22] = OP_EQUAL;
             }
             
@@ -384,12 +384,12 @@ int BRAddressIsValid(const char *addr)
 // writes the 20 byte hash160 of addr to md20 and returns true on success
 int BRAddressHash160(void *md20, const char *addr)
 {
-    uint8_t data[21];
+    uint8_t data[22];
     int r = 0;
     
     assert(md20 != NULL);
     assert(addr != NULL);
-    r = (BRBase58CheckDecode(data, sizeof(data), addr) == 21);
-    if (r) memcpy(md20, &data[1], 20);
+    r = (BRBase58CheckDecode(data, sizeof(data), addr) == 22);
+    if (r) memcpy(md20, &data[2], 20);
     return r;
 }
