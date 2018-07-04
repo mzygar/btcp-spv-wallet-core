@@ -105,7 +105,9 @@ void BRTxInputSetSignature(BRTxInput *input, const uint8_t *signature, size_t si
         input->sigLen = sigLen;
         array_new(input->signature, sigLen);
         array_add_array(input->signature, signature, sigLen);
-        if (! input->address[0]) BRAddressFromScriptSig(input->address, sizeof(input->address), signature, sigLen);
+        if (! input->address[0]) {
+            BRAddressFromScriptSig(input->address, sizeof(input->address), signature, sigLen);
+        }
     }
 }
 
@@ -192,7 +194,9 @@ static size_t _BRTransactionWitnessData(const BRTransaction *tx, uint8_t *data, 
     BRTxInput input;
     int anyoneCanPay = (hashType & SIGHASH_ANYONECANPAY), sigHash = (hashType & 0x1f);
     size_t i, off = 0;
-    
+//  found this in serializing tx in btcp core, makes little sense imho-why shifting
+//    hashType |= (0x42 << 8);
+
     if (index >= tx->inCount) return 0;
     if (data && off + sizeof(uint32_t) <= dataLen) UInt32SetLE(&data[off], tx->version); // tx version
     off += sizeof(uint32_t);
@@ -532,6 +536,7 @@ int BRTransactionSign(BRTransaction *tx, int forkId, BRKey keys[], size_t keysCo
         const uint8_t *elems[BRScriptElements(NULL, 0, input->script, input->scriptLen)];
         size_t elemsCount = BRScriptElements(elems, sizeof(elems)/sizeof(*elems), input->script, input->scriptLen);
         uint8_t pubKey[BRKeyPubKey(&keys[j], NULL, 0)];
+        printf("priv key: %s",u256_hex_encode(UInt256Reverse(keys[j].secret)));
         size_t pkLen = BRKeyPubKey(&keys[j], pubKey, sizeof(pubKey));
         uint8_t sig[73], script[1 + sizeof(sig) + 1 + sizeof(pubKey)];
         size_t sigLen, scriptLen;
@@ -542,8 +547,16 @@ int BRTransactionSign(BRTransaction *tx, int forkId, BRKey keys[], size_t keysCo
             size_t dataLen = _BRTransactionData(tx, data, sizeof(data), i, forkId | SIGHASH_ALL);
             
             BRSHA256_2(&md, data, dataLen);
+
+            char txHex[dataLen*2 + 1];
+            for (size_t hh = 0; hh < dataLen; hh++) {
+                sprintf(&txHex[hh*2], "%02x", data[hh]);
+            }
+            printf("signing tx: %s", txHex);
+
+
             sigLen = BRKeySign(&keys[j], sig, sizeof(sig) - 1, md);
-            sig[sigLen++] = forkId | SIGHASH_ALL;
+            sig[sigLen++] = forkId | SIGHASH_ALL;//tutej
             scriptLen = BRScriptPushData(script, sizeof(script), sig, sigLen);
             scriptLen += BRScriptPushData(&script[scriptLen], sizeof(script) - scriptLen, pubKey, pkLen);
             BRTxInputSetSignature(input, script, scriptLen);

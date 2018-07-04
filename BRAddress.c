@@ -308,7 +308,7 @@ size_t BRAddressFromScriptSig(char *addr, size_t addrLen, const uint8_t *script,
 #if BITCOIN_TESTNET
         data[0] = BITCOIN_SCRIPT_ADDRESS_TEST;
 #endif
-        d = BRScriptData(elems[count - 2], &l);
+        d = BRScriptData(elems[count - 1], &l);
         if (d) BRHash160(&data[2], d, l);
     }
     else if (count >= 1 && *elems[count - 1] <= OP_PUSHDATA4 && *elems[count - 1] > 0) { // pay-to-pubkey scriptSig
