@@ -568,8 +568,8 @@ int BRTransactionSign(BRTransaction *tx, int forkId, BRKey keys[], size_t keysCo
             BRTxInputSetSignature(input, script, scriptLen);
         }
         else { // pay-to-pubkey
-            uint8_t data[_BRTransactionData(tx, NULL, 0, i, forkId | SIGHASH_ALL)];
-            size_t dataLen = _BRTransactionData(tx, data, sizeof(data), i, forkId | SIGHASH_ALL);
+            uint8_t data[_BRTransactionData(tx, NULL, 0, i, forkId | btcpFork | SIGHASH_ALL)];
+            size_t dataLen = _BRTransactionData(tx, data, sizeof(data), i, forkId | btcpFork | SIGHASH_ALL);
 
             BRSHA256_2(&md, data, dataLen);
             sigLen = BRKeySign(&keys[j], sig, sizeof(sig) - 1, md);
